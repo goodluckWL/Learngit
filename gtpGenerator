@@ -92,3 +92,115 @@ def gtpv2Generator(messageType, teid, seqNo):
     
 if __name__ == "__main__":
     udp_client()
+
+
+#支持json读取
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Aug 13 19:41:42 2019
+
+@author: 17974
+"""
+
+#支持输入源IP和目的IP
+
+import socket
+import struct
+#from itertools import islice
+import json
+
+#定义UDP客户端函数
+def udp_client():
+    
+    #读取数据文本,引号内输入数据文本路径
+    with open("C:/Users/17974/Desktop/jsontext.json",'r') as load_f:
+        dataDict = json.load(load_f)
+    #file = open(r'C:\Users\17974\Desktop\data2.txt')
+    #跳过第1行读取发送信息
+    #for data in islice(file, 1, None):
+    #for data in open(r'C:\Users\w50005151\Desktop\data.txt'):
+        #split默认以任意多个空格分割字符串，并获得发送信息列表（切片）
+        #dataList = data.split()
+    for item in dataDict:
+        srcIP = item['srcIP']
+        srcPort = int(item['srcPort'])
+        dstIP = item['dstIP']
+        dstPort = int(item['dstPort'])
+        gtpVersion = int(item['gtpVersion'])
+        messageType = int(item['messageType'])
+        teid = int(item['Teid'])
+        seqNo = int(item['seqNo'])
+        '''
+        #按顺序匹配列表中的数据信息
+        srcIP = dataList[0]
+        srcPort = int(dataList[1])
+        dstIP = dataList[2]
+        dstPort = int(dataList[3])
+        gtpVersion = int(dataList[4])
+        messageType = int(dataList[5])
+        teid = int(dataList[6])
+        seqNo = int(dataList[7])
+        '''
+        clientAddr = (srcIP, srcPort)
+        severAddr = (dstIP, dstPort)
+        #创建套接字udp_socket，其中AF_INET表示IPv4，SOCK_DGRAM表示UDP
+        udpClient_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        #绑定客户端地址（源地址）
+        udpClient_socket.bind(clientAddr)
+        ##获取待发送的gtp报文
+        if gtpVersion == 1:                                                      #生成gtpv1报文
+            data_send = gtpv1Generator(messageType, teid, seqNo)
+        elif gtpVersion == 2:
+            data_send = gtpv2Generator(messageType, teid, seqNo)                 #生成gtpv2报文
+        else:
+            print('消息类型错误！')
+            continue
+        #向目的地址发送gtp报文
+        udpClient_socket.sendto(data_send, severAddr)
+        print('发送完成！')
+        udpClient_socket.close()
+
+def gtpv1Generator(messageType, teid, seqNo):
+    print('正在生成GTPv1数据报!')                            #目前设为空
+    #gtpDatagram = ''.encode()
+    gtpVersion = '001'                                    #固定
+    protocal = '1'                                        #固定
+    reserve = '0'                                         #固定
+    extension = '0'                                       #0或1
+    sequence = '1'                                        #0或1
+    PN = '0'                                              #0或1
+    byte1 = int(gtpVersion + protocal + reserve + extension + sequence + PN, 2)  #1字节
+    #messageType = 16                                                             #1字节
+    payLoadLen = 4 + 84                                          #占2字节，84为数据长度，应该是用len()求
+    #Teid = 0                                                              #占4字节
+    #seqNo = 0                                                   #占2字节
+    exHeader = 0                                                 #占2字节
+    gtpv1Datagram = struct.pack('!BBHIHH', byte1, messageType, payLoadLen, teid, seqNo, exHeader) + b'\x02d\x00`f\x01\x00\x00\xf0\x0f\xfd\x10 \xa0\x0b\x84\x11\x0c\xfb\xd4\x87\x14\x07\x1a\x00\x01\x80\x00\x06\xf1!\x7f\x00\x00\x01\x83\x00\x07\x06ggsn61\x85\x00\x04\xb4\x16\x1fP\x85\x00\x04\xb4\x16 n\x86\x00\x07h1\t\x01\x00\x00\xf0\x87\x00\x0c\x02\rC\x1fQ\x04DD!B\x01\x01'
+    return gtpv1Datagram
+
+def gtpv2Generator(messageType, teid, seqNo):
+    print('正在生成GTPv2数据报!')
+    gtpVersion = '010'
+    p = '0'                                                     #是否搭载消息，0不搭载，1搭载
+    T = '1'                                                     #是否有TEID字段
+    MP = '0'                                                    #是否指定消息优先级
+    spare = '00'                                                #备用
+    byte1 = int(gtpVersion + p + T + MP + spare, 2)             #1字节
+    #messageType                                                #1字节
+    messageLen = 8 + 84                                         #2字节
+    #teid                                                       #4字节
+    #seqNo                                                      #3字节
+    #根据seqNo分别得到其三个字节的上的数
+    seqNo1 = seqNo//(2**16)
+    seqNo2 = (seqNo - seqNo1*2**16)//(2**8)
+    seqNo3 = seqNo%(2**8)
+    messagePrio = '0000'                                        #MP==0，则无优先级
+    Spare = '0000'                                              #备用
+    byteLast = int(messagePrio + Spare, 2)                      #1字节
+    gtpv2Datagram = struct.pack('!BBHIBBBB', byte1, messageType, messageLen, teid, seqNo1, seqNo2, seqNo3, byteLast) + b'\x02d\x00`f\x01\x00\x00\xf0\x0f\xfd\x10 \xa0\x0b\x84\x11\x0c\xfb\xd4\x87\x14\x07\x1a\x00\x01\x80\x00\x06\xf1!\x7f\x00\x00\x01\x83\x00\x07\x06ggsn61\x85\x00\x04\xb4\x16\x1fP\x85\x00\x04\xb4\x16 n\x86\x00\x07h1\t\x01\x00\x00\xf0\x87\x00\x0c\x02\rC\x1fQ\x04DD!B\x01\x01'
+    return gtpv2Datagram
+    
+    
+
+if __name__ == "__main__":
+    udp_client()
